@@ -80,7 +80,7 @@ campus-idle/
 ### 1. 克隆项目
 
 ```bash
-git clone https://github.com/yourusername/campus-idle.git
+git clone https://github.com/longlin05/campus-idle.git
 cd campus-idle
 ```
 
