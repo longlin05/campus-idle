@@ -8,10 +8,10 @@ import lombok.Data;
 public class ProductImage {
     @TableId(type = IdType.AUTO)
     private Long imageId;
-    
+
     private Long productId;
-    
+
     private String imageUrl;
-    
+
     private Integer sortOrder;
 }

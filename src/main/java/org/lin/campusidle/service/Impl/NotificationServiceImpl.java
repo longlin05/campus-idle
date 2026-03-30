@@ -5,11 +5,10 @@ import org.lin.campusidle.entity.Notification;
 import org.lin.campusidle.mapper.NotificationMapper;
 import org.lin.campusidle.service.NotificationService;
 import org.lin.campusidle.vo.PageV0;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.lin.campusidle.common.util.RedisUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 
-import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -20,7 +19,7 @@ public class NotificationServiceImpl implements NotificationService {
     @Autowired
     private NotificationMapper notificationMapper;
     @Autowired
-    private RedisTemplate<String, Object> redisTemplate;
+    private RedisUtils redisUtils;
 
     // Redis键前缀
     private static final String UNREAD_COUNT_KEY = "notification:unread:count:";
@@ -58,11 +57,15 @@ public class NotificationServiceImpl implements NotificationService {
     public Result<Notification> getNotificationById(Long notificationId) {
         // 先从Redis缓存中获取
         String key = NOTIFICATION_KEY + notificationId;
-        Notification notification = (Notification) redisTemplate.opsForValue().get(key);
+        Object cachedObject = redisUtils.get(key);
+        Notification notification = null;
+        if (cachedObject != null && cachedObject instanceof Notification) {
+            notification = (Notification) cachedObject;
+        }
         
         if (notification == null) {
             // 缓存穿透保护：使用布隆过滤器或空值缓存
-            if (Boolean.TRUE.equals(redisTemplate.hasKey(key + ":null"))) {
+            if (redisUtils.get(key + ":null") != null) {
                 return Result.error(404, "通知不存在");
             }
             
@@ -70,12 +73,12 @@ public class NotificationServiceImpl implements NotificationService {
             notification = notificationMapper.findByNotificationId(notificationId);
             if (notification == null) {
                 // 缓存空值，防止缓存穿透
-                redisTemplate.opsForValue().set(key + ":null", "1", 1, TimeUnit.HOURS);
+                redisUtils.set(key + ":null", "1", 1, TimeUnit.HOURS);
                 return Result.error(404, "通知不存在");
             }
             
             // 存入Redis，设置过期时间，防止缓存雪崩
-            redisTemplate.opsForValue().set(key, notification, REDIS_EXPIRE_TIME, TimeUnit.SECONDS);
+            redisUtils.set(key, notification, REDIS_EXPIRE_TIME, TimeUnit.SECONDS);
         }
         
         // 标记为已读
@@ -84,7 +87,7 @@ public class NotificationServiceImpl implements NotificationService {
             notification.setUpdateTime(new Date());
             notificationMapper.updateById(notification);
             // 更新Redis缓存
-            redisTemplate.opsForValue().set(key, notification, REDIS_EXPIRE_TIME, TimeUnit.SECONDS);
+            redisUtils.set(key, notification, REDIS_EXPIRE_TIME, TimeUnit.SECONDS);
             // 减少未读计数
             decrementUnreadCount(notification.getReceiverId());
         }
@@ -98,7 +101,11 @@ public class NotificationServiceImpl implements NotificationService {
         String key = UNREAD_COUNT_KEY + receiverId;
         
         // 先从Redis获取
-        Integer count = (Integer) redisTemplate.opsForValue().get(key);
+        Object cachedObject = redisUtils.get(key);
+        Integer count = null;
+        if (cachedObject != null && cachedObject instanceof Integer) {
+            count = (Integer) cachedObject;
+        }
         if (count != null) {
             return Result.success(count);
         }
@@ -106,7 +113,7 @@ public class NotificationServiceImpl implements NotificationService {
         // 从数据库查询
         count = notificationMapper.countUnread(receiverId);
         // 存入Redis，设置过期时间
-        redisTemplate.opsForValue().set(key, count, REDIS_EXPIRE_TIME, TimeUnit.SECONDS);
+        redisUtils.set(key, count, REDIS_EXPIRE_TIME, TimeUnit.SECONDS);
         
         return Result.success(count);
     }
@@ -121,7 +128,7 @@ public class NotificationServiceImpl implements NotificationService {
         
         // 清除Redis缓存
         String key = UNREAD_COUNT_KEY + receiverId;
-        redisTemplate.delete(key);
+        redisUtils.delete(key);
         
         return Result.success("一键已读成功");
     }
@@ -141,7 +148,7 @@ public class NotificationServiceImpl implements NotificationService {
         
         // 删除Redis缓存
         String key = NOTIFICATION_KEY + notificationId;
-        redisTemplate.delete(key);
+        redisUtils.delete(key);
         
         // 如果是未读消息，减少未读计数
         if (notification.getIsRead() == 0) {
@@ -171,17 +178,17 @@ public class NotificationServiceImpl implements NotificationService {
     // 增加未读计数
     private void incrementUnreadCount(Long receiverId) {
         String key = UNREAD_COUNT_KEY + receiverId;
-        redisTemplate.opsForValue().increment(key);
+        redisUtils.incrementCount(key);
         // 设置过期时间
-        redisTemplate.expire(key, REDIS_EXPIRE_TIME, TimeUnit.SECONDS);
+        redisUtils.expire(key, REDIS_EXPIRE_TIME, TimeUnit.SECONDS);
     }
 
     // 减少未读计数
     private void decrementUnreadCount(Long receiverId) {
         String key = UNREAD_COUNT_KEY + receiverId;
-        redisTemplate.opsForValue().decrement(key);
+        redisUtils.decrementCount(key);
         // 设置过期时间
-        redisTemplate.expire(key, REDIS_EXPIRE_TIME, TimeUnit.SECONDS);
+        redisUtils.expire(key, REDIS_EXPIRE_TIME, TimeUnit.SECONDS);
     }
 
 }

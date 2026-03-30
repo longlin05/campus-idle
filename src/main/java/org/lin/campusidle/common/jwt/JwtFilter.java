@@ -30,7 +30,7 @@ public class JwtFilter extends OncePerRequestFilter {
             String token = authorization.substring(jwtConfig.getTokenPrefix().length());
             try {
                 // 验证令牌
-                if (!jwtUtils.isExpired(token)) {
+                if (!jwtUtils.isTokenExpired(token)) {
                     // 可以在这里将用户信息存储到请求中，供后续处理使用
                     // 例如：request.setAttribute("userId", jwtUtils.getSubject(token));
                 }

@@ -51,4 +51,9 @@ public class Result<T> {
     public static <T> Result<T> businessError(String message) {
         return new Result<>(ResultCodeEnum.BUSINESS_ERROR.getCode(), message,null);
     }
+    
+    //判断响应是否成功
+    public boolean isSuccess() {
+        return ResultCodeEnum.SUCCESS.getCode().equals(this.code);
+    }
 }

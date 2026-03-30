@@ -13,5 +13,5 @@ public class JwtConfig {
     // 过期时间（毫秒）
     private Long expireTime;
     // 令牌前缀
-    private String tokenPrefix;
+    private String tokenPrefix = "Bearer ";
 }

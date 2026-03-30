@@ -9,10 +9,11 @@ import org.lin.campusidle.service.OrderService;
 import org.lin.campusidle.vo.PageV0;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
-
+import org.lin.campusidle.common.util.RedisUtils;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class OrderServiceImpl implements OrderService {
@@ -21,6 +22,8 @@ public class OrderServiceImpl implements OrderService {
     private OrderMapper orderMapper;
     @Autowired
     private ProductMapper productMapper;
+    @Autowired
+    private RedisUtils redisUtils;
 
     //创建订单功能（调用校验商品功能）
     @Override
@@ -57,10 +60,29 @@ public class OrderServiceImpl implements OrderService {
     //按订单id查询订单信息功能
     @Override
     public Result<OrderInfo> getOrderById(Long orderId) {
+        // 尝试从缓存获取
+        String cacheKey = "order:info:" + orderId;
+        Object cachedObject = redisUtils.get(cacheKey);
+        OrderInfo cachedOrder = null;
+        if (cachedObject != null && cachedObject instanceof OrderInfo) {
+            cachedOrder = (OrderInfo) cachedObject;
+        }
+        
+        if (cachedOrder != null) {
+            return Result.success(cachedOrder);
+        }
+        
+        // 缓存未命中，从数据库查询
         OrderInfo orderInfo = orderMapper.findByOrderId(orderId);
         if (orderInfo == null) {
+            // 缓存空对象，设置5分钟过期时间
+            redisUtils.set(cacheKey, null, 5, TimeUnit.MINUTES);
             return Result.error(404, "订单不存在");
         }
+        
+        // 缓存订单信息，设置7天过期时间
+        redisUtils.set(cacheKey, orderInfo, 7, TimeUnit.DAYS);
+        
         return Result.success(orderInfo);
     }
 
@@ -80,6 +102,10 @@ public class OrderServiceImpl implements OrderService {
         orderInfo.setUpdateTime(new Date());
         orderMapper.updateById(orderInfo);
         
+        // 清理缓存
+        String cacheKey = "order:info:" + orderId;
+        redisUtils.delete(cacheKey);
+        
         return Result.success("订单支付成功");
     }
 
@@ -97,6 +123,10 @@ public class OrderServiceImpl implements OrderService {
         orderInfo.setStatus(3); // 3-已完成
         orderInfo.setUpdateTime(new Date());
         orderMapper.updateById(orderInfo);
+        
+        // 清理缓存
+        String cacheKey = "order:info:" + orderId;
+        redisUtils.delete(cacheKey);
         
         return Result.success("确认收货成功");
     }
@@ -116,6 +146,10 @@ public class OrderServiceImpl implements OrderService {
         orderInfo.setCancelTime(new Date());
         orderInfo.setUpdateTime(new Date());
         orderMapper.updateById(orderInfo);
+        
+        // 清理缓存
+        String cacheKey = "order:info:" + orderId;
+        redisUtils.delete(cacheKey);
         
         return Result.success("订单取消成功");
     }
@@ -161,6 +195,10 @@ public class OrderServiceImpl implements OrderService {
         orderInfo.setUpdateTime(new Date());
         orderMapper.updateById(orderInfo);
         
+        // 清理缓存
+        String cacheKey = "order:info:" + orderId;
+        redisUtils.delete(cacheKey);
+        
         return Result.success("退款申请成功");
     }
 
@@ -178,6 +216,10 @@ public class OrderServiceImpl implements OrderService {
         orderInfo.setStatus(6); // 6-已退款
         orderInfo.setUpdateTime(new Date());
         orderMapper.updateById(orderInfo);
+        
+        // 清理缓存
+        String cacheKey = "order:info:" + orderId;
+        redisUtils.delete(cacheKey);
         
         return Result.success("退款处理成功");
     }
